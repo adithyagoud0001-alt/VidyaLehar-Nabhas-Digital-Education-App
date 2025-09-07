@@ -1,0 +1,265 @@
+import React, { createContext, useState, useEffect, useMemo, useCallback } from 'react';
+
+type Language = 'en' | 'pa';
+
+// Embedded translations to avoid module resolution issues in the browser.
+const translations = {
+  en: {
+    "welcome_to_vidyalehar": "Welcome to VidyaLehar",
+    "nabhas_digital_classroom": "Nabha's Digital Classroom",
+    "login_to_your_account": "Login to your account",
+    "create_an_account": "Create an account",
+    "username": "Username",
+    "password": "Password",
+    "login": "Login",
+    "dont_have_account": "Don't have an account?",
+    "register_now": "Register Now",
+    "already_have_account": "Already have an account?",
+    "login_now": "Login Now",
+    "register": "Register",
+    "choose_your_role": "Choose your role",
+    "student": "Student",
+    "teacher": "Teacher",
+    "logout": "Logout",
+    "online": "Online",
+    "offline_mode": "Offline Mode",
+    "my_courses": "My Courses",
+    "select_course_prompt": "Select a course to start learning.",
+    "no_courses_available": "No courses available. Please check back later.",
+    "teacher_dashboard": "Teacher Dashboard",
+    "overall_class_performance": "Overall Class Performance",
+    "avg_score_percent": "Average Score (%)",
+    "course_completion_rate": "Course Completion Rate",
+    "student_performance_trend": "Student Performance Trend",
+    "select_a_student_to_see_trend": "Select a student to see their trend.",
+    "lesson_engagement_heatmap": "Lesson Engagement Heatmap",
+    "easy": "Easy",
+    "challenging": "Challenging",
+    "not_started": "Not Started",
+    "individual_student_progress_summary": "Individual Student Progress Summary",
+    "course": "Course",
+    "progress": "Progress",
+    "avg_score": "Avg. Score",
+    "back_to_dashboard": "Back to Dashboard",
+    "check_your_understanding": "Check your understanding",
+    "quiz_result": "You scored {score} out of {total}!",
+    "restart_quiz": "Restart Quiz",
+    "question_progress": "Question {current}/{total}",
+    "welcome_student": "Welcome, {name}!",
+    "class": "Class",
+    "select_class_error": "Please select a class.",
+    "select_your_class": "Select your class",
+    "teaching_class": "Teaching Class",
+    "select_teaching_class": "Select class to teach",
+    "my_progress": "My Progress",
+    "course_progress_overview": "Here's an overview of your progress in each course.",
+    "no_progress_yet": "You haven't made any progress yet. Start a lesson to begin!",
+    "completed": "completed",
+    "transcript": "Transcript",
+    "progress_saved": "Your progress has been saved.",
+    "listen_to_lesson": "Listen to Lesson",
+    "stop_listening": "Stop Listening",
+    "download_lesson": "Download for offline access",
+    "downloading": "Downloading...",
+    "delete_download": "Delete download",
+    "download_disabled_offline": "Connect to internet to download",
+    "video_offline_placeholder": "Download this lesson to watch the video offline.",
+    "download_failed": "Download failed. Please check your connection and try again.",
+    "student_details": "Student Details",
+    "hide_details": "Hide Details",
+    "show_details": "Show Details",
+    "my_performance": "My Performance",
+    "progress_overview": "Progress Overview",
+    "quiz_history": "Quiz History",
+    "quiz_history_description": "Review your scores from all the quizzes you've taken.",
+    "lesson": "Lesson",
+    "best_score": "Best Score",
+    "attempts": "Attempts",
+    "no_quiz_attempts_yet": "You haven't attempted any quizzes yet. Complete a lesson quiz to see your results here!",
+    "student_data": "Student Data",
+    "search_students_placeholder": "Search students by name...",
+    "about": "About",
+    "about_vidyalehar": "About VidyaLehar",
+    "our_mission": "Our Mission",
+    "mission_statement": "To bridge the educational gap in rural India by providing accessible, offline-first digital learning tools. We believe every child, regardless of their location or internet connectivity, deserves access to quality education.",
+    "what_we_offer": "What We Offer",
+    "offer_1": "Offline-First Learning: Download lessons and videos to study anytime, anywhere, without needing a constant internet connection.",
+    "offer_2": "Interactive Content: Engaging lessons with quizzes and multimedia to make learning fun and effective.",
+    "offer_3": "AI-Powered Tutoring: Get instant help and personalized guidance from our AI tutor, available 24/7 (online).",
+    "offer_4": "Bilingual Support: Content available in both English and Punjabi to cater to local students.",
+    "our_impact": "Our Impact",
+    "impact_statement": "VidyaLehar is designed specifically for schools in and around Nabha, Punjab. By empowering students with digital literacy and providing teachers with robust content management tools, we aim to create a brighter future for the next generation.",
+    "close": "Close",
+    "course_creation_tooltip": "Courses should have a clear title and a brief description. Aim for 3-5 lessons per course to keep students engaged.",
+    "lesson_creation_tooltip": "Lessons should be focused on a single topic. Use simple language. Videos are highly recommended. Quizzes should have 2-4 clear options.",
+    "key_takeaways": "Key Takeaways",
+    "lesson_summary": "Lesson Summary",
+    "generate_with_ai": "Generate with AI",
+    "generating": "Generating...",
+    "summary_placeholder": "A brief summary of the lesson's key points will appear here. You can generate one with AI or write your own.",
+    "edit_summary_note": "You can edit the generated summary below.",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "delete_course": "Delete Course",
+    "delete_course_confirmation": "Are you sure you want to permanently delete the course:",
+    "delete_course_warning": "This action cannot be undone and will also delete all associated lessons.",
+    "difficulty": "Difficulty",
+    "difficulty_easy": "Easy",
+    "difficulty_medium": "Medium",
+    "difficulty_hard": "Hard",
+    // Fix: Add missing translation keys for AITutor component
+    "ai_tutor_offline_message": "The AI Tutor is only available when you are online.",
+    "ask_a_question_placeholder": "Ask a question about the lesson...",
+    "thinking": "Thinking...",
+    "ask": "Ask",
+    "ai_tutor_thinking_message": "Your AI Tutor is thinking..."
+  },
+  pa: {
+    "welcome_to_vidyalehar": "ਵਿਦਿਆ ਲਹਿਰ ਵਿੱਚ ਤੁਹਾਡਾ ਸੁਆਗਤ ਹੈ",
+    "nabhas_digital_classroom": "ਨਭਾ ਦਾ ਡਿਜੀਟਲ ਕਲਾਸਰੂਮ",
+    "login_to_your_account": "ਆਪਣੇ ਖਾਤੇ ਵਿੱਚ ਲਾਗਇਨ ਕਰੋ",
+    "create_an_account": "ਇੱਕ ਖਾਤਾ ਬਣਾਓ",
+    "username": "ਯੂਜ਼ਰਨੇਮ",
+    "password": "ਪਾਸਵਰਡ",
+    "login": "ਲਾਗਇਨ ਕਰੋ",
+    "dont_have_account": "ਕੋਈ ਖਾਤਾ ਨਹੀਂ ਹੈ?",
+    "register_now": "ਹੁਣੇ ਦਰਜ ਕਰੋ",
+    "already_have_account": "ਪਹਿਲਾਂ ਤੋਂ ਹੀ ਖਾਤਾ ਹੈ?",
+    "login_now": "ਹੁਣੇ ਲਾਗਇਨ ਕਰੋ",
+    "register": "ਰਜਿਸਟਰ ਕਰੋ",
+    "choose_your_role": "ਆਪਣੀ ਭੂਮਿਕਾ ਚੁਣੋ",
+    "student": "ਵਿਦਿਆਰਥੀ",
+    "teacher": "ਅਧਿਆਪਕ",
+    "logout": "ਲਾਗਆਊਟ",
+    "online": "ਔਨਲਾਈਨ",
+    "offline_mode": "ਔਫਲਾਈਨ ਮੋਡ",
+    "my_courses": "ਮੇਰੇ ਕੋਰਸ",
+    "select_course_prompt": "ਸਿੱਖਣਾ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਇੱਕ ਕੋਰਸ ਚੁਣੋ।",
+    "no_courses_available": "ਕੋਈ ਕੋਰਸ ਉਪਲਬਧ ਨਹੀਂ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਬਾਅਦ ਵਿੱਚ ਦੁਬਾਰਾ ਜਾਂਚ ਕਰੋ।",
+    "teacher_dashboard": "ਅਧਿਆਪਕ ਡੈਸ਼ਬੋਰਡ",
+    "overall_class_performance": "ਸਮੁੱਚੀ ਕਲਾਸ ਦੀ ਕਾਰਗੁਜ਼ਾਰੀ",
+    "avg_score_percent": "ਔਸਤ ਸਕੋਰ (%)",
+    "course_completion_rate": "ਕੋਰਸ ਪੂਰਾ ਕਰਨ ਦੀ ਦਰ",
+    "student_performance_trend": "ਵਿਦਿਆਰਥੀ ਦੀ ਕਾਰਗੁਜ਼ਾਰੀ ਦਾ ਰੁਝਾਨ",
+    "select_a_student_to_see_trend": "ਰੁਝਾਨ ਦੇਖਣ ਲਈ ਇੱਕ ਵਿਦਿਆਰਥੀ ਚੁਣੋ।",
+    "lesson_engagement_heatmap": "ਪਾਠ ਸ਼ਮੂਲੀਅਤ ਹੀਟਮੈਪ",
+    "easy": "ਸੌਖਾ",
+    "challenging": "ਚੁਣੌਤੀਪੂਰਨ",
+    "not_started": "ਸ਼ੁਰੂ ਨਹੀਂ ਹੋਇਆ",
+    "individual_student_progress_summary": "ਵਿਅਕਤੀਗਤ ਵਿਦਿਆਰਥੀ ਤਰੱਕੀ ਸਾਰ",
+    "course": "ਕੋਰਸ",
+    "progress": "ਤਰੱਕੀ",
+    "avg_score": "ਔਸਤ ਸਕੋਰ",
+    "back_to_dashboard": "ਡੈਸ਼ਬੋਰਡ 'ਤੇ ਵਾਪਸ",
+    "check_your_understanding": "ਆਪਣੀ ਸਮਝ ਦੀ ਜਾਂਚ ਕਰੋ",
+    "quiz_result": "ਤੁਸੀਂ {total} ਵਿੱਚੋਂ {score} ਅੰਕ ਪ੍ਰਾਪਤ ਕੀਤੇ!",
+    "restart_quiz": "ਕਵਿਜ਼ ਮੁੜ ਸ਼ੁਰੂ ਕਰੋ",
+    "question_progress": "ਸਵਾਲ {current}/{total}",
+    "welcome_student": "ਜੀ ਆਇਆਂ ਨੂੰ, {name}!",
+    "class": "ਜਮਾਤ",
+    "select_class_error": "ਕਿਰਪਾ ਕਰਕੇ ਇੱਕ ਜਮਾਤ ਚੁਣੋ।",
+    "select_your_class": "ਆਪਣੀ ਜਮਾਤ ਚੁਣੋ",
+    "teaching_class": "ਪੜ੍ਹਾਉਣ ਵਾਲੀ ਜਮਾਤ",
+    "select_teaching_class": "ਪੜ੍ਹਾਉਣ ਲਈ ਜਮਾਤ ਚੁਣੋ",
+    "my_progress": "ਮੇਰੀ ਤਰੱਕੀ",
+    "course_progress_overview": "ਇੱਥੇ ਹਰੇਕ ਕੋਰਸ ਵਿੱਚ ਤੁਹਾਡੀ ਤਰੱਕੀ ਦਾ ਇੱਕ ਸੰਖੇਪ ਜਾਣਕਾਰੀ ਹੈ।",
+    "no_progress_yet": "ਤੁਸੀਂ ਅਜੇ ਤੱਕ ਕੋਈ ਤਰੱਕੀ ਨਹੀਂ ਕੀਤੀ ਹੈ। ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਇੱਕ ਪਾਠ ਸ਼ੁਰੂ ਕਰੋ!",
+    "completed": "ਪੂਰਾ ਹੋਇਆ",
+    "transcript": "ਟ੍ਰਾਂਸਕ੍ਰਿਪਟ",
+    "progress_saved": "ਤੁਹਾਡੀ ਤਰੱਕੀ ਸੁਰੱਖਿਅਤ ਹੋ ਗਈ ਹੈ।",
+    "listen_to_lesson": "ਪਾਠ ਸੁਣੋ",
+    "stop_listening": "ਸੁਣਨਾ ਬੰਦ ਕਰੋ",
+    "download_lesson": "ਔਫਲਾਈਨ ਪਹੁੰਚ ਲਈ ਡਾਊਨਲੋਡ ਕਰੋ",
+    "downloading": "ਡਾਊਨਲੋਡ ਹੋ ਰਿਹਾ ਹੈ...",
+    "delete_download": "ਡਾਊਨਲੋਡ ਮਿਟਾਓ",
+    "download_disabled_offline": "ਡਾਊਨਲੋਡ ਕਰਨ ਲਈ ਇੰਟਰਨੈਟ ਨਾਲ ਜੁੜੋ",
+    "video_offline_placeholder": "ਵੀਡੀਓ ਨੂੰ ਔਫਲਾਈਨ ਦੇਖਣ ਲਈ ਇਸ ਪਾਠ ਨੂੰ ਡਾਊਨਲੋਡ ਕਰੋ।",
+    "download_failed": "ਡਾਊਨਲੋਡ ਫੇਲ੍ਹ ਹੋ ਗਿਆ। ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਕਨੈਕਸ਼ਨ ਚੈੱਕ ਕਰੋ ਅਤੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।",
+    "student_details": "ਵਿਦਿਆਰਥੀ ਵੇਰਵੇ",
+    "hide_details": "ਵੇਰਵੇ ਛੁਪਾਓ",
+    "show_details": "ਵੇਰਵੇ ਵੇਖੋ",
+    "my_performance": "ਮੇਰੀ ਕਾਰਗੁਜ਼ਾਰੀ",
+    "progress_overview": "ਤਰੱਕੀ ਦੀ ਸੰਖੇਪ ਜਾਣਕਾਰੀ",
+    "quiz_history": "ਕਵਿਜ਼ ਇਤਿਹਾਸ",
+    "quiz_history_description": "ਤੁਹਾਡੇ ਦੁਆਰਾ ਲਏ ਗਏ ਸਾਰੇ ਕਵਿਜ਼ਾਂ ਤੋਂ ਆਪਣੇ ਸਕੋਰਾਂ ਦੀ ਸਮੀਖਿਆ ਕਰੋ।",
+    "lesson": "ਪਾਠ",
+    "best_score": "ਵਧੀਆ ਸਕੋਰ",
+    "attempts": "ਕੋਸ਼ਿਸ਼ਾਂ",
+    "no_quiz_attempts_yet": "ਤੁਸੀਂ ਅਜੇ ਤੱਕ ਕੋਈ ਕਵਿਜ਼ ਦੀ ਕੋਸ਼ਿਸ਼ ਨਹੀਂ ਕੀਤੀ ਹੈ। ਆਪਣੇ ਨਤੀਜੇ ਇੱਥੇ ਦੇਖਣ ਲਈ ਇੱਕ ਪਾਠ ਕਵਿਜ਼ ਨੂੰ ਪੂਰਾ ਕਰੋ!",
+    "student_data": "ਵਿਦਿਆਰਥੀ ਡਾਟਾ",
+    "search_students_placeholder": "ਨਾਮ ਦੁਆਰਾ ਵਿਦਿਆਰਥੀਆਂ ਨੂੰ ਖੋਜੋ...",
+    "about": "ਬਾਰੇ",
+    "about_vidyalehar": "ਵਿਦਿਆ ਲਹਿਰ ਬਾਰੇ",
+    "our_mission": "ਸਾਡਾ ਮਿਸ਼ਨ",
+    "mission_statement": "ਪੇਂਡੂ ਭਾਰਤ ਵਿੱਚ ਪਹੁੰਚਯੋਗ, ਔਫਲਾਈਨ-ਪਹਿਲਾਂ ਡਿਜੀਟਲ ਸਿਖਲਾਈ ਦੇ ਸਾਧਨ ਪ੍ਰਦਾਨ ਕਰਕੇ ਸਿੱਖਿਆ ਦੇ ਪਾੜੇ ਨੂੰ ਪੂਰਾ ਕਰਨਾ। ਸਾਡਾ ਮੰਨਣਾ ਹੈ ਕਿ ਹਰ ਬੱਚਾ, ਉਹਨਾਂ ਦੀ ਸਥਿਤੀ ਜਾਂ ਇੰਟਰਨੈਟ ਕਨੈਕਟੀਵਿਟੀ ਦੀ ਪਰਵਾਹ ਕੀਤੇ ਬਿਨਾਂ, ਮਿਆਰੀ ਸਿੱਖਿਆ ਤੱਕ ਪਹੁੰਚ ਦਾ ਹੱਕਦਾਰ ਹੈ।",
+    "what_we_offer": "ਅਸੀਂ ਕੀ ਪੇਸ਼ ਕਰਦੇ ਹਾਂ",
+    "offer_1": "ਔਫਲਾਈਨ-ਪਹਿਲਾਂ ਸਿਖਲਾਈ: ਲਗਾਤਾਰ ਇੰਟਰਨੈਟ ਕਨੈਕਸ਼ਨ ਦੀ ਲੋੜ ਤੋਂ ਬਿਨਾਂ, ਕਿਸੇ ਵੀ ਸਮੇਂ, ਕਿਤੇ ਵੀ ਪੜ੍ਹਨ ਲਈ ਪਾਠ ਅਤੇ ਵੀਡੀਓ ਡਾਊਨਲੋਡ ਕਰੋ।",
+    "offer_2": "ਇੰਟਰਐਕਟਿਵ ਸਮੱਗਰੀ: ਸਿੱਖਣ ਨੂੰ ਮਜ਼ੇਦਾਰ ਅਤੇ ਪ੍ਰਭਾਵਸ਼ਾਲੀ ਬਣਾਉਣ ਲਈ ਕਵਿਜ਼ਾਂ ਅਤੇ ਮਲਟੀਮੀਡੀਆ ਨਾਲ ਦਿਲਚਸਪ ਪਾਠ।",
+    "offer_3": "AI-ਸੰਚਾਲਿਤ ਟਿਊਟਰਿੰਗ: ਸਾਡੇ AI ਟਿਊਟਰ ਤੋਂ ਤੁਰੰਤ ਮਦਦ ਅਤੇ ਵਿਅਕਤੀਗਤ ਮਾਰਗਦਰਸ਼ਨ ਪ੍ਰਾਪਤ ਕਰੋ, 24/7 (ਔਨਲਾਈਨ) ਉਪਲਬਧ।",
+    "offer_4": "ਦੋਭਾਸ਼ੀ ਸਹਾਇਤਾ: ਸਥਾਨਕ ਵਿਦਿਆਰਥੀਆਂ ਨੂੰ ਪੂਰਾ ਕਰਨ ਲਈ ਅੰਗਰੇਜ਼ੀ ਅਤੇ ਪੰਜਾਬੀ ਦੋਵਾਂ ਵਿੱਚ ਸਮੱਗਰੀ ਉਪਲਬਧ ਹੈ।",
+    "our_impact": "ਸਾਡਾ ਪ੍ਰਭਾਵ",
+    "impact_statement": "ਵਿਦਿਆ ਲਹਿਰ ਖਾਸ ਤੌਰ 'ਤੇ ਨਾਭਾ, ਪੰਜਾਬ ਅਤੇ ਆਸ ਪਾਸ ਦੇ ਸਕੂਲਾਂ ਲਈ ਤਿਆਰ ਕੀਤਾ ਗਿਆ ਹੈ। ਵਿਦਿਆਰਥੀਆਂ ਨੂੰ ਡਿਜੀਟਲ ਸਾਖਰਤਾ ਨਾਲ ਸ਼ਕਤੀ ਪ੍ਰਦਾਨ ਕਰਕੇ ਅਤੇ ਅਧਿਆਪਕਾਂ ਨੂੰ ਮਜ਼ਬੂਤ ਸਮੱਗਰੀ ਪ੍ਰਬੰਧਨ ਸਾਧਨ ਪ੍ਰਦਾਨ ਕਰਕੇ, ਸਾਡਾ ਉਦੇਸ਼ ਅਗਲੀ ਪੀੜ੍ਹੀ ਲਈ ਇੱਕ ਉੱਜਵਲ ਭਵਿੱਖ ਬਣਾਉਣਾ ਹੈ।",
+    "close": "ਬੰਦ ਕਰੋ",
+    "course_creation_tooltip": "ਕੋਰਸਾਂ ਦਾ ਸਿਰਲੇਖ ਸਪਸ਼ਟ ਅਤੇ ਸੰਖੇਪ ਵਰਣਨ ਹੋਣਾ ਚਾਹੀਦਾ ਹੈ। ਵਿਦਿਆਰਥੀਆਂ ਨੂੰ ਰੁਝੇਵੇਂ ਰੱਖਣ ਲਈ ਪ੍ਰਤੀ ਕੋਰਸ 3-5 ਪਾਠਾਂ ਦਾ ਟੀਚਾ ਰੱਖੋ।",
+    "lesson_creation_tooltip": "ਪਾਠ ਇੱਕ ਵਿਸ਼ੇ 'ਤੇ ਕੇਂਦ੍ਰਿਤ ਹੋਣੇ ਚਾਹੀਦੇ ਹਨ। ਸਰਲ ਭਾਸ਼ਾ ਦੀ ਵਰਤੋਂ ਕਰੋ। ਵੀਡੀਓਜ਼ ਦੀ ਜ਼ੋਰਦਾਰ ਸਿਫਾਰਸ਼ ਕੀਤੀ ਜਾਂਦੀ ਹੈ। ਕਵਿਜ਼ਾਂ ਵਿੱਚ 2-4 ਸਪਸ਼ਟ ਵਿਕਲਪ ਹੋਣੇ ਚਾਹੀਦੇ ਹਨ।",
+    "key_takeaways": "ਮੁੱਖ ਨੁਕਤੇ",
+    "lesson_summary": "ਪਾਠ ਦਾ ਸਾਰ",
+    "generate_with_ai": "AI ਨਾਲ ਤਿਆਰ ਕਰੋ",
+    "generating": "ਤਿਆਰ ਹੋ ਰਿਹਾ ਹੈ...",
+    "summary_placeholder": "ਪਾਠ ਦੇ ਮੁੱਖ ਨੁਕਤਿਆਂ ਦਾ ਸੰਖੇਪ ਇੱਥੇ ਦਿਖਾਈ ਦੇਵੇਗਾ। ਤੁਸੀਂ AI ਨਾਲ ਇੱਕ ਤਿਆਰ ਕਰ ਸਕਦੇ ਹੋ ਜਾਂ ਆਪਣਾ ਲਿਖ ਸਕਦੇ ਹੋ।",
+    "edit_summary_note": "ਤੁਸੀਂ ਹੇਠਾਂ ਦਿੱਤੇ ਤਿਆਰ ਕੀਤੇ ਸਾਰ ਨੂੰ ਸੰਪਾਦਿਤ ਕਰ ਸਕਦੇ ਹੋ।",
+    "cancel": "ਰੱਦ ਕਰੋ",
+    "delete": "ਮਿਟਾਓ",
+    "delete_course": "ਕੋਰਸ ਮਿਟਾਓ",
+    "delete_course_confirmation": "ਕੀ ਤੁਸੀਂ ਯਕੀਨੀ ਤੌਰ 'ਤੇ ਕੋਰਸ ਨੂੰ ਸਥਾਈ ਤੌਰ 'ਤੇ ਮਿਟਾਉਣਾ ਚਾਹੁੰਦੇ ਹੋ:",
+    "delete_course_warning": "ਇਹ ਕਾਰਵਾਈ ਵਾਪਸ ਨਹੀਂ ਕੀਤੀ ਜਾ ਸਕਦੀ ਅਤੇ ਸਾਰੇ ਸੰਬੰਧਿਤ ਪਾਠਾਂ ਨੂੰ ਵੀ ਮਿਟਾ ਦੇਵੇਗੀ।",
+    "difficulty": "ਕਠਿਨਾਈ",
+    "difficulty_easy": "ਸੌਖਾ",
+    "difficulty_medium": "ਦਰਮਿਆਨਾ",
+    "difficulty_hard": "ਔਖਾ",
+    // Fix: Add missing translation keys for AITutor component
+    "ai_tutor_offline_message": "AI ਟਿਊਟਰ ਸਿਰਫ਼ ਉਦੋਂ ਹੀ ਉਪਲਬਧ ਹੁੰਦਾ ਹੈ ਜਦੋਂ ਤੁਸੀਂ ਔਨਲਾਈਨ ਹੁੰਦੇ ਹੋ।",
+    "ask_a_question_placeholder": "ਪਾਠ ਬਾਰੇ ਕੋਈ ਸਵਾਲ ਪੁੱਛੋ...",
+    "thinking": "ਸੋਚ ਰਿਹਾ ਹੈ...",
+    "ask": "ਪੁੱਛੋ",
+    "ai_tutor_thinking_message": "ਤੁਹਾਡਾ AI ਟਿਊਟਰ ਸੋਚ ਰਿਹਾ ਹੈ..."
+  }
+};
+
+
+type TranslationKey = keyof (typeof translations)['en'];
+
+interface LanguageContextType {
+  language: Language;
+  setLanguage: (language: Language) => void;
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
+}
+
+export const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
+
+export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [language, setLanguage] = useState<Language>(() => {
+    const storedLang = localStorage.getItem('vidyalehar_language');
+    return storedLang === 'pa' ? 'pa' : 'en';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('vidyalehar_language', language);
+  }, [language]);
+
+  const t = useCallback((key: TranslationKey, params: Record<string, string | number> = {}) => {
+    let translation = translations[language]?.[key] || translations['en'][key];
+    Object.keys(params).forEach(paramKey => {
+      translation = translation.replace(`{${paramKey}}`, String(params[paramKey]));
+    });
+    return translation;
+  }, [language]);
+
+  const value = useMemo(() => ({ language, setLanguage, t }), [language, t]);
+
+  return (
+    <LanguageContext.Provider value={value}>
+      {children}
+    </LanguageContext.Provider>
+  );
+};
