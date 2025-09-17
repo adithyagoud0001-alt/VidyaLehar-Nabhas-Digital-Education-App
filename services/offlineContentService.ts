@@ -74,12 +74,45 @@ export const saveCourse = async (courseData: Omit<Course, 'id' | 'lessons' | 'au
 export const deleteCourse = async (courseId: string): Promise<void> => {
     const courseToDelete = await db.courses.get(courseId);
     if (courseToDelete) {
-        // Queue remote deletion first
+        // --- Sync Queueing ---
+        // 1. Queue deletion for all associated lessons
+        for (const lesson of courseToDelete.lessons) {
+            await db.syncQueue.add({ type: 'DELETE_LESSON', payload: { id: lesson.id }, timestamp: Date.now() });
+        }
+        // 2. Queue remote deletion for the course itself
         await db.syncQueue.add({ type: 'DELETE_COURSE', payload: { id: courseId }, timestamp: Date.now() });
-        // Then delete locally
+
+        // --- Local Deletion ---
+        // 3. Delete the course locally (lessons are embedded, so they go too)
         await db.courses.delete(courseId);
-        // Also delete associated student progress locally
-        // Note: A more robust system would handle this server-side with cascade deletes
+
+        // --- Clean up associated student progress ---
+        // 4. Find all student progress records and update them
+        const allProgress = await db.studentProgress.toArray();
+        for (const studentProgress of allProgress) {
+            const progressIndex = studentProgress.courseProgress.findIndex(cp => cp.courseId === courseId);
+            
+            // If the student had progress in this course, remove it
+            if (progressIndex > -1) {
+                studentProgress.courseProgress.splice(progressIndex, 1);
+                
+                // Recalculate overall score history for today
+                const allCourseScores = studentProgress.courseProgress.map(cp => cp.score).filter(s => s > 0);
+                const overallAverage = allCourseScores.length > 0 ? allCourseScores.reduce((sum, s) => sum + s, 0) / allCourseScores.length : 0;
+                const today = new Date().toISOString().split('T')[0];
+                const todayHistory = studentProgress.scoreHistory.find(h => h.date === today);
+
+                if (todayHistory) {
+                    todayHistory.score = overallAverage;
+                }
+                
+                // 5. Update local DB for the student
+                await db.studentProgress.put(studentProgress);
+                
+                // 6. Queue the updated progress for sync
+                await db.syncQueue.add({ type: 'UPDATE_PROGRESS', payload: studentProgress, timestamp: Date.now() });
+            }
+        }
     }
 };
 
@@ -120,6 +153,20 @@ export const saveLesson = async (
     // Queue lesson sync (flat structure for Supabase)
     await db.syncQueue.add({ type: 'SAVE_LESSON', payload: { ...finalLessonData, course_id: courseId }, timestamp: Date.now() });
     
+    // --- Update totalLessons count for all students with progress in this course ---
+    // This is especially important for newly added lessons.
+    if (!isUpdate) { // Only run for new lessons to avoid unnecessary writes on edits
+        const allProgress = await db.studentProgress.toArray();
+        for (const studentProgress of allProgress) {
+            const courseProgress = studentProgress.courseProgress.find(cp => cp.courseId === courseId);
+            if (courseProgress) {
+                courseProgress.totalLessons = course.lessons.length;
+                await db.studentProgress.put(studentProgress);
+                await db.syncQueue.add({ type: 'UPDATE_PROGRESS', payload: studentProgress, timestamp: Date.now() });
+            }
+        }
+    }
+
     return finalLessonData;
 };
 
@@ -130,10 +177,58 @@ export const deleteLesson = async (courseId: string, lessonId: string): Promise<
         if (lessonToDelete?.hasOfflineVideo) {
             await deleteVideo(lessonId).catch(err => console.error(`Failed to delete video for lesson ${lessonId}:`, err));
         }
+        
+        // Update course object locally
+        const originalLessonCount = course.lessons.length;
         course.lessons = course.lessons.filter(l => l.id !== lessonId);
-        await db.courses.put(course);
-        // Queue remote deletion
-        await db.syncQueue.add({ type: 'DELETE_LESSON', payload: { id: lessonId }, timestamp: Date.now() });
+        
+        // Only proceed if a lesson was actually deleted
+        if (course.lessons.length < originalLessonCount) {
+            await db.courses.put(course);
+            // Queue remote deletion
+            await db.syncQueue.add({ type: 'DELETE_LESSON', payload: { id: lessonId }, timestamp: Date.now() });
+
+            // --- Clean up associated student progress ---
+            const allProgress = await db.studentProgress.toArray();
+            for (const studentProgress of allProgress) {
+                const courseProgress = studentProgress.courseProgress.find(cp => cp.courseId === courseId);
+                
+                if (courseProgress) {
+                    let progressNeedsUpdate = false;
+                    const lessonStatusIndex = courseProgress.lessonStatus.findIndex(ls => ls.lessonId === lessonId);
+                    
+                    if (lessonStatusIndex > -1) {
+                        courseProgress.lessonStatus.splice(lessonStatusIndex, 1);
+                        
+                        // Recalculate course-specific progress
+                        const completedLessonsWithScore = courseProgress.lessonStatus.filter(ls => ls.finalScore > 0);
+                        courseProgress.completedLessons = completedLessonsWithScore.length;
+                        const totalScore = completedLessonsWithScore.reduce((sum, ls) => sum + ls.finalScore, 0);
+                        courseProgress.score = completedLessonsWithScore.length > 0 ? totalScore / completedLessonsWithScore.length : 0;
+                        
+                        // Recalculate overall score history for today
+                        const allCourseScores = studentProgress.courseProgress.map(cp => cp.score).filter(s => s > 0);
+                        const overallAverage = allCourseScores.length > 0 ? allCourseScores.reduce((sum, s) => sum + s, 0) / allCourseScores.length : 0;
+                        const today = new Date().toISOString().split('T')[0];
+                        const todayHistory = studentProgress.scoreHistory.find(h => h.date === today);
+                        if (todayHistory) {
+                            todayHistory.score = overallAverage;
+                        }
+                        progressNeedsUpdate = true;
+                    }
+                    
+                    if (courseProgress.totalLessons !== course.lessons.length) {
+                        courseProgress.totalLessons = course.lessons.length;
+                        progressNeedsUpdate = true;
+                    }
+
+                    if (progressNeedsUpdate) {
+                        await db.studentProgress.put(studentProgress);
+                        await db.syncQueue.add({ type: 'UPDATE_PROGRESS', payload: studentProgress, timestamp: Date.now() });
+                    }
+                }
+            }
+        }
     }
 };
 

@@ -1,6 +1,10 @@
 import Dexie, { type Table } from 'dexie';
 import type { Course, Lesson, StudentProgress } from '../types';
-import type { Profile } from './supabaseClient';
+// Fix: Removed direct import of `Profile` and instead import `Database` to derive it.
+import type { Database } from './supabaseClient';
+
+// Fix: Define Profile type locally from the central Database definition for consistency.
+type Profile = Database['public']['Tables']['profiles']['Row'];
 
 // Define a type for offline mutations
 export interface SyncQueueItem {
@@ -23,11 +27,12 @@ export const db = new Dexie('vidyaleharLocalDB') as Dexie & {
     videos: Table<{ id: string; blob: Blob }, string>; // Storing an object with id and blob
 };
 
-db.version(1).stores({
+db.version(2).stores({
     courses: 'id, authorId, forClass',
     lessons: 'id, courseId',
     studentProgress: 'studentId', // primary key
     profiles: 'id, class', // primary key
-    syncQueue: '++id, timestamp', // auto-incrementing id
+    // Fix: Add 'type' to the index to allow querying by action type.
+    syncQueue: '++id, type, timestamp', // auto-incrementing id, index on type and timestamp
     videos: 'id', // primary key is the 'id' property of the stored object
 });

@@ -1,7 +1,12 @@
 import { UserRole } from "../constants";
 import type { User, Student, Teacher } from "../types";
-import { supabase, type Profile } from './supabaseClient';
+// Fix: Removed direct import of `Profile` type and instead import `Database` to derive it.
+import { supabase } from './supabaseClient';
+import type { Database } from './supabaseClient';
 import { db } from './db';
+
+// Fix: Define Profile type locally from the central Database definition for consistency.
+type Profile = Database['public']['Tables']['profiles']['Row'];
 
 const constructAppUser = (profile: Profile): User => {
     return {
@@ -48,8 +53,9 @@ export const register = async (username: string, password: string, role: UserRol
         class: classNumber,
     };
 
-    // Fix: Wrap insert argument in an array to match expected overloads.
-    const { error: profileError } = await supabase.from('profiles').insert([newProfile]);
+    // Fix: The insert method expects a single object or an array. Passing a single object is cleaner here.
+    // The root cause of the original 'never' type error was in the Database type definition.
+    const { error: profileError } = await supabase.from('profiles').insert(newProfile);
 
     if (profileError) {
         // If profile creation fails, we should ideally delete the auth user to avoid orphaned users.
