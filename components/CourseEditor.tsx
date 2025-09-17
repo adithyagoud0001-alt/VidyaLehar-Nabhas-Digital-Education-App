@@ -28,7 +28,7 @@ const CourseEditor: React.FC<CourseEditorProps> = ({ course, teacherId, teacherC
     }
   }, [course]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !description.trim()) {
         setError('Title and description cannot be empty.');
@@ -45,7 +45,7 @@ const CourseEditor: React.FC<CourseEditorProps> = ({ course, teacherId, teacherC
     };
 
     try {
-        saveCourse(courseData, teacherId);
+        await saveCourse(courseData, teacherId);
         onSave();
     } catch (err: any) {
         setError(err.message);

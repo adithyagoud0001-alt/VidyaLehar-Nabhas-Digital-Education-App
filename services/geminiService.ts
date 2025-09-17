@@ -1,13 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
 import type { Student, Teacher } from '../types';
 
-// Ensure the API key is available from environment variables
-const apiKey = process.env.API_KEY;
-if (!apiKey) {
-    console.warn("API_KEY environment variable not set. AI Tutor will not function.");
-}
+// Fix: Per guidelines, the API key must be obtained from process.env.API_KEY and used directly.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const ai = new GoogleGenAI({ apiKey: apiKey || '' });
 
 // Fix: Add askAITutor function to be exported and used in AITutor.tsx component
 export const askAITutor = async (
@@ -17,8 +13,9 @@ export const askAITutor = async (
     user: Student | Teacher,
     performanceContext: { attempts: number; bestScore: number } | null
 ): Promise<string> => {
-    if (!apiKey) {
-        throw new Error("AI features are not available. The API key is missing.");
+    // Fix: Check if API key is provided via environment variables. This also resolves the impossible comparison error.
+    if (!process.env.API_KEY) {
+      return "The AI Tutor is not configured. Please add a valid Gemini API key.";
     }
 
     const model = 'gemini-2.5-flash';
@@ -56,11 +53,8 @@ export const askAITutor = async (
             contents: prompt,
         });
 
-        if (response && response.text) {
-            return response.text.trim();
-        } else {
-            throw new Error('No response text from AI');
-        }
+        // Fix: Directly access the 'text' property as per guidelines. It is guaranteed to exist on a successful response.
+        return response.text.trim();
     } catch (error) {
         console.error("Error calling Gemini API for AI tutor:", error);
         throw new Error("Failed to get a response from the AI tutor.");
@@ -71,10 +65,10 @@ export const generateLessonSummary = async (
     lessonTitle: string,
     lessonContent: string
 ): Promise<string> => {
-    if (!apiKey) {
-        throw new Error("AI features are not available. The API key is missing.");
+    // Fix: Check if API key is provided via environment variables. This also resolves the impossible comparison error.
+     if (!process.env.API_KEY) {
+      return "AI Summary generation is not configured. Please add a valid Gemini API key.";
     }
-
     const model = 'gemini-2.5-flash';
 
     // Remove HTML tags for a cleaner prompt
@@ -97,11 +91,8 @@ export const generateLessonSummary = async (
             contents: prompt,
         });
 
-        if (response && response.text) {
-            return response.text.trim();
-        } else {
-            throw new Error('No response text from AI');
-        }
+        // Fix: Directly access the 'text' property as per guidelines.
+        return response.text.trim();
     } catch (error) {
         console.error("Error calling Gemini API for summary generation:", error);
         throw new Error("Failed to generate a summary from the AI.");

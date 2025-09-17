@@ -1,104 +1,151 @@
 import { UserRole } from "../constants";
 import type { User, Student, Teacher } from "../types";
+import { supabase, type Profile } from './supabaseClient';
+import { db } from './db';
 
-const USERS_KEY = 'vidyalehar_users';
-const CURRENT_USER_KEY = 'vidyalehar_currentUser';
-
-// Helper to get users from localStorage
-const getUsers = (): User[] => {
-    const users = localStorage.getItem(USERS_KEY);
-    return users ? JSON.parse(users) : [];
+const constructAppUser = (profile: Profile): User => {
+    return {
+        id: profile.id,
+        username: profile.username,
+        role: profile.role,
+        class: profile.class,
+    };
 };
 
-// Helper to save users to localStorage
-const saveUsers = (users: User[]) => {
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-};
+export const register = async (username: string, password: string, role: UserRole, classNumber?: number): Promise<User> => {
+    if (!classNumber) {
+        throw new Error('Class number is required for registration.');
+    }
+    if (password.length < 6) {
+        throw new Error('Password must be at least 6 characters long.');
+    }
 
-// Simple hashing function for demonstration. 
-// In a real application, use a robust library like bcrypt.
-const simpleHash = (password: string): string => {
-    // This is NOT secure, for demo purposes only.
-    return `hashed_${password}_${password.split("").reverse().join("")}`;
-};
+    // Supabase requires email for sign up, we'll use a dummy email since we are username-based.
+    const email = `${username.toLowerCase()}@vidyalehar.local`;
 
-export const register = (username: string, password: string, role: UserRole, classNumber?: number): User => {
-    const users = getUsers();
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+            data: {
+                username: username,
+            }
+        }
+    });
+
+    if (authError) {
+        throw new Error(authError.message);
+    }
+    if (!authData.user) {
+        throw new Error("Registration failed: no user returned.");
+    }
     
-    if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-        throw new Error('Username already exists.');
+    // Now create a profile for the user in our public profiles table
+    const newProfile: Profile = {
+        id: authData.user.id,
+        username: username,
+        role: role,
+        class: classNumber,
+    };
+
+    // Fix: Wrap insert argument in an array to match expected overloads.
+    const { error: profileError } = await supabase.from('profiles').insert([newProfile]);
+
+    if (profileError) {
+        // If profile creation fails, we should ideally delete the auth user to avoid orphaned users.
+        // This is an advanced topic (e.g. use a Supabase function), for now, we'll just throw.
+        throw new Error(`Could not create user profile: ${profileError.message}`);
     }
 
-    if (password.length < 4) {
-        throw new Error('Password must be at least 4 characters long.');
+    // Also save profile to local DB
+    await db.profiles.put(newProfile);
+
+    return constructAppUser(newProfile);
+};
+
+
+export const login = async (username: string, password: string): Promise<User> => {
+    // We still use dummy email for login
+    const email = `${username.toLowerCase()}@vidyalehar.local`;
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+    });
+
+    if (authError) {
+        throw new Error(authError.message);
+    }
+    if (!authData.user) {
+        throw new Error("Login failed: no user returned.");
     }
 
-    let newUser: Student | Teacher;
+    // Fetch the user's profile
+    const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single();
+    
+    if (profileError || !profile) {
+        throw new Error("Login failed: could not retrieve user profile.");
+    }
 
-    if (role === UserRole.STUDENT) {
-        if (!classNumber) {
-            throw new Error('Please select a class for the student.');
+    // Also save profile to local DB
+    await db.profiles.put(profile);
+
+    return constructAppUser(profile);
+};
+
+
+export const logout = async () => {
+    await supabase.auth.signOut();
+};
+
+export const getCurrentUser = async (): Promise<User | null> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+        return null;
+    }
+
+    // Check local DB first for faster startup
+    let profile = await db.profiles.get(session.user.id);
+
+    if (!profile) {
+        // If not in local DB, fetch from remote
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+        if (error || !data) {
+            console.error("Could not fetch profile for active session:", error);
+            // This might mean the session is stale, signing out.
+            await logout();
+            return null;
         }
-        newUser = {
-            id: `user_${Date.now()}`,
-            username,
-            passwordHash: simpleHash(password),
-            role: UserRole.STUDENT,
-            name: username, // Default name to username
-            class: classNumber,
-        };
-    } else {
-        if (!classNumber) {
-            throw new Error('Please select a class for the teacher.');
-        }
-        newUser = {
-            id: `user_${Date.now()}`,
-            username,
-            passwordHash: simpleHash(password),
-            role: UserRole.TEACHER,
-            name: username, // Default name to username
-            class: classNumber,
-        };
+        profile = data;
+        await db.profiles.put(profile); // Cache for next time
     }
 
-    users.push(newUser);
-    saveUsers(users);
-
-    // Automatically log in the user after registration
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(newUser));
-
-    return newUser;
+    return constructAppUser(profile);
 };
 
-
-export const login = (username: string, password: string): User => {
-    const users = getUsers();
-    const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
-
-    if (!user || user.passwordHash !== simpleHash(password)) {
-        throw new Error('Invalid username or password.');
-    }
-
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-    return user;
+export const getAllStudents = async (): Promise<Student[]> => {
+    const profiles = await db.profiles.toArray();
+    const studentProfiles = profiles.filter(p => p.role === UserRole.STUDENT);
+    return studentProfiles.map(p => ({
+        ...constructAppUser(p),
+        name: p.username,
+        role: UserRole.STUDENT,
+    }));
 };
 
-
-export const logout = () => {
-    localStorage.removeItem(CURRENT_USER_KEY);
-};
-
-export const getCurrentUser = (): User | null => {
-    const userJson = localStorage.getItem(CURRENT_USER_KEY);
-    return userJson ? JSON.parse(userJson) : null;
-};
-
-export const getAllStudents = (): Student[] => {
-    const users = getUsers();
-    return users.filter(u => u.role === UserRole.STUDENT) as Student[];
-};
-
-export const getStudentsByClass = (classNumber: number): Student[] => {
-    const students = getAllStudents();
-    return students.filter(s => s.class === classNumber);
+export const getStudentsByClass = async (classNumber: number): Promise<Student[]> => {
+    const studentProfiles = await db.profiles.where({ class: classNumber, role: UserRole.STUDENT }).toArray();
+    return studentProfiles.map(p => ({
+        ...constructAppUser(p),
+        name: p.username,
+        role: UserRole.STUDENT,
+    }));
 };

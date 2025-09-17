@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { User } from '../types';
+// Fix: Import SearchResult from types.ts and separate it from the function import.
+import type { User, SearchResult } from '../types';
 import { useTheme } from '../hooks/useTheme';
 import { useTranslation } from '../hooks/useTranslation';
 import { SunIcon } from './icons/SunIcon';
 import { MoonIcon } from './icons/MoonIcon';
 import { LanguageIcon } from './icons/LanguageIcon';
 import { SearchIcon } from './icons/SearchIcon';
-import { searchContent, type SearchResult } from '../services/offlineContentService';
+import { searchContent } from '../services/offlineContentService';
 import { BookOpenIcon } from './icons/BookOpenIcon';
 import { SparklesIcon } from './icons/SparklesIcon';
 import { InformationCircleIcon } from './icons/InformationCircleIcon';
 import AboutModal from './AboutModal';
 
 interface HeaderProps {
-  user: User;
+  user: User & { name: string };
   isOnline: boolean;
   onLogout: () => void;
   onSearchSelect: (result: SearchResult) => void;
@@ -29,14 +30,17 @@ const Header: React.FC<HeaderProps> = ({ user, isOnline, onLogout, onSearchSelec
   const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (searchQuery.trim().length > 1) {
-        const results = searchContent(searchQuery);
-        setSearchResults(results);
-        setIsDropdownOpen(results.length > 0);
-    } else {
-        setSearchResults([]);
-        setIsDropdownOpen(false);
-    }
+    const performSearch = async () => {
+      if (searchQuery.trim().length > 1) {
+          const results = await searchContent(searchQuery);
+          setSearchResults(results);
+          setIsDropdownOpen(results.length > 0);
+      } else {
+          setSearchResults([]);
+          setIsDropdownOpen(false);
+      }
+    };
+    performSearch();
   }, [searchQuery]);
 
   useEffect(() => {

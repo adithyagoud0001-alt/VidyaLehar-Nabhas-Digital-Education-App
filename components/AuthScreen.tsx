@@ -22,27 +22,32 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [role, setRole] = useState<UserRole>(UserRole.STUDENT);
   const [classNumber, setClassNumber] = useState<number | undefined>(undefined);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const { t } = useTranslation();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
 
     if (isRegistering && !classNumber) {
         setError(t('select_class_error'));
+        setIsLoading(false);
         return;
     }
 
     try {
       let user;
       if (isRegistering) {
-        user = register(username, password, role, classNumber);
+        user = await register(username, password, role, classNumber);
       } else {
-        user = login(username, password);
+        user = await login(username, password);
       }
       onLogin(user);
     } catch (err: any) {
       setError(err.message);
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -131,9 +136,10 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
               <button
                 type="submit"
-                className="w-full p-3 bg-brand-600 text-white rounded-lg font-semibold hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-300 transition"
+                disabled={isLoading}
+                className="w-full p-3 bg-brand-600 text-white rounded-lg font-semibold hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-300 transition disabled:bg-slate-400"
               >
-                {isRegistering ? t('register') : t('login')}
+                {isLoading ? '...' : (isRegistering ? t('register') : t('login'))}
               </button>
             </form>
 

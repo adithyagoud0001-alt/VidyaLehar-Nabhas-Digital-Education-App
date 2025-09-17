@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getStudentProgress, getCourses } from '../services/offlineContentService';
 import type { StudentProgress, Course, LessonStatus } from '../types';
 import { useTranslation } from '../hooks/useTranslation';
@@ -18,33 +18,36 @@ const QuizHistory: React.FC<QuizHistoryProps> = ({ studentId }) => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    const allProgress = getStudentProgress();
-    const studentProgress = allProgress.find(p => p.studentId === studentId);
-    const courses = getCourses();
+    const fetchData = async () => {
+        const allProgress = await getStudentProgress();
+        const studentProgress = allProgress.find(p => p.studentId === studentId);
+        const courses = await getCourses();
 
-    if (studentProgress) {
-        const lessonMap = new Map<string, { lessonTitle: string, courseTitle: string }>();
-        courses.forEach(course => {
-            course.lessons.forEach(lesson => {
-                lessonMap.set(lesson.id, { lessonTitle: lesson.title, courseTitle: course.title });
+        if (studentProgress) {
+            const lessonMap = new Map<string, { lessonTitle: string, courseTitle: string }>();
+            courses.forEach(course => {
+                course.lessons.forEach(lesson => {
+                    lessonMap.set(lesson.id, { lessonTitle: lesson.title, courseTitle: course.title });
+                });
             });
-        });
-        
-        const results: QuizResult[] = [];
-        studentProgress.courseProgress.forEach(cp => {
-            cp.lessonStatus.forEach(ls => {
-                const lessonInfo = lessonMap.get(ls.lessonId);
-                if (lessonInfo) {
-                    results.push({
-                        courseTitle: lessonInfo.courseTitle,
-                        lessonTitle: lessonInfo.lessonTitle,
-                        status: ls
-                    });
-                }
+            
+            const results: QuizResult[] = [];
+            studentProgress.courseProgress.forEach(cp => {
+                cp.lessonStatus.forEach(ls => {
+                    const lessonInfo = lessonMap.get(ls.lessonId);
+                    if (lessonInfo) {
+                        results.push({
+                            courseTitle: lessonInfo.courseTitle,
+                            lessonTitle: lessonInfo.lessonTitle,
+                            status: ls
+                        });
+                    }
+                });
             });
-        });
-        setQuizResults(results);
-    }
+            setQuizResults(results);
+        }
+    };
+    fetchData();
   }, [studentId]);
 
   return (

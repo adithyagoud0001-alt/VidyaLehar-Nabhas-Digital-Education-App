@@ -30,8 +30,11 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onSelectCours
   const { t } = useTranslation();
 
   useEffect(() => {
-    const coursesData = getCoursesForClass(user.class);
-    setCourses(coursesData);
+    const fetchCourses = async () => {
+        const coursesData = await getCoursesForClass(user.class);
+        setCourses(coursesData);
+    };
+    fetchCourses();
   }, [user.class]);
 
   return (

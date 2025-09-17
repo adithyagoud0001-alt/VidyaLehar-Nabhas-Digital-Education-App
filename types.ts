@@ -1,23 +1,22 @@
 import { UserRole } from './constants';
 
 // --- User & Auth ---
+// This is a combined type for app use, derived from Supabase Auth user and our custom Profile table.
 export interface User {
   id: string;
-  username: string;
-  passwordHash: string; // In a real app, never store plain text passwords
-  role: UserRole;
+  username: string; // From our 'profiles' table
+  role: UserRole;   // From our 'profiles' table
+  class: number;    // From our 'profiles' table
 }
 
 export interface Student extends User {
   role: UserRole.STUDENT;
-  name: string;
-  class: number;
+  name: string; // Same as username
 }
 
 export interface Teacher extends User {
   role: UserRole.TEACHER;
-  name: string; // Could be extended with school info, etc.
-  class: number;
+  name: string; // Same as username
 }
 
 // --- Content ---
@@ -82,11 +81,20 @@ export interface StudentProgress {
   scoreHistory: ScoreHistory[];
 }
 
+// Fix: Add and export SearchResult type to be used across the application.
+export interface SearchResult {
+  type: 'course' | 'lesson';
+  course: Course;
+  lesson?: Lesson;
+  title: string;
+  context: string;
+}
+
 // --- App State ---
 export type View = 'AUTH' | 'DASHBOARD' | 'LESSON';
 
 export interface AppState {
-    currentUser: User | Student | null;
+    currentUser: User | null;
     currentView: View;
     selectedCourse: Course | null;
     selectedLesson: Lesson | null;

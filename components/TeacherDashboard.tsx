@@ -29,6 +29,7 @@ type TeacherTab = 'analytics' | 'content';
 const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user }) => {
     const [students, setStudents] = useState<Student[]>([]);
     const [progressData, setProgressData] = useState<StudentProgress[]>([]);
+    const [coursesForClass, setCoursesForClass] = useState<Course[]>([]);
     const [selectedStudentId, setSelectedStudentId] = useState<string>('');
     const [studentSearchQuery, setStudentSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState<TeacherTab>('analytics');
@@ -44,33 +45,34 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user }) => {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
     
-    const refetchManagedCourses = useCallback(() => {
-        setManagedCourses(getCoursesByAuthor(user.id).filter(c => c.forClass === user.class));
-    }, [user.id, user.class]);
+    const fetchData = useCallback(async () => {
+        const studentList = await getStudentsByClass(user.class);
+        setStudents(studentList);
+        if (studentList.length > 0 && !selectedStudentId) {
+            setSelectedStudentId(studentList[0].id);
+        }
 
-    const refetchProgressData = useCallback(() => {
-        const studentList = getStudentsByClass(user.class);
-        const allStudentProgress = getStudentProgress();
+        const allStudentProgress = await getStudentProgress();
         const studentIdsInClass = new Set(studentList.map(s => s.id));
         const studentProgressForClass = allStudentProgress.filter(p => studentIdsInClass.has(p.studentId));
         setProgressData(studentProgressForClass);
-    }, [user.class]);
-
-    // Fetch all data on mount
-    useEffect(() => {
-        const studentList = getStudentsByClass(user.class);
-        setStudents(studentList);
-        refetchProgressData();
         
-        if (studentList.length > 0) {
-            setSelectedStudentId(studentList[0].id); // Select first student by default
-        }
-        refetchManagedCourses();
-    }, [user.id, user.class, refetchManagedCourses, refetchProgressData]);
+        const courses = await getCoursesForClass(user.class);
+        setCoursesForClass(courses);
+
+        const authoredCourses = await getCoursesByAuthor(user.id);
+        // Fix: Removed the restrictive filter. A teacher should see all courses they have authored
+        // in their content management view, not just the ones for their currently assigned class.
+        setManagedCourses(authoredCourses);
+
+    }, [user.class, user.id, selectedStudentId]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
 
 
     // --- Analytics Memoized Data ---
-    const coursesForClass = useMemo(() => getCoursesForClass(user.class), [user.class]);
     const allLessonsForClass = useMemo(() => coursesForClass.flatMap(course => course.lessons), [coursesForClass]);
 
     const mergedStudentData = useMemo(() => {
@@ -134,11 +136,10 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user }) => {
         setIsDeleteModalOpen(true);
     };
 
-    const handleConfirmDelete = () => {
+    const handleConfirmDelete = async () => {
         if (courseToDelete) {
-            deleteCourse(courseToDelete.id);
-            refetchManagedCourses();
-            refetchProgressData();
+            await deleteCourse(courseToDelete.id);
+            await fetchData();
         }
         setIsDeleteModalOpen(false);
         setCourseToDelete(null);
@@ -156,10 +157,10 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user }) => {
         setIsLessonEditorOpen(true);
     };
     
-    const handleDeleteLesson = (courseId: string, lessonId: string) => {
+    const handleDeleteLesson = async (courseId: string, lessonId: string) => {
         if (window.confirm('Are you sure you want to delete this lesson?')) {
-            deleteLesson(courseId, lessonId);
-            refetchManagedCourses();
+            await deleteLesson(courseId, lessonId);
+            await fetchData();
         }
     };
 
@@ -169,7 +170,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user }) => {
         setEditingCourse(null);
         setEditingLesson(null);
         setCourseForLesson(null);
-        refetchManagedCourses();
+        fetchData(); // Refetch data after saving
     };
 
     return (
@@ -213,7 +214,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user }) => {
                         <h3 className="font-bold text-lg mb-4 text-slate-700 dark:text-slate-200">{t('course_completion_rate')}</h3>
                         <ResponsiveContainer width="100%" height={300}>
                             <PieChart>
-                                <Pie data={completionData} cx="50%" cy="50%" labelLine={false} outerRadius={80} fill="#8884d8" dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                                <Pie data={completionData} cx="50%" cy="50%" labelLine={false} outerRadius={80} fill="#8884d8" dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${((percent as number) * 100).toFixed(0)}%`}>
                                     {completionData.map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
@@ -365,9 +366,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user }) => {
             {isCourseEditorOpen && (
                 <CourseEditor
                     course={editingCourse}
-                    onSave={() => {
-                        handleCloseEditors();
-                    }}
+                    onSave={handleCloseEditors}
                     onCancel={handleCloseEditors}
                     teacherId={user.id}
                     teacherClass={user.class}
@@ -378,9 +377,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user }) => {
                 <LessonEditor
                     lesson={editingLesson}
                     courseId={courseForLesson.id}
-                    onSave={() => {
-                        handleCloseEditors();
-                    }}
+                    onSave={handleCloseEditors}
                     onCancel={handleCloseEditors}
                 />
             )}

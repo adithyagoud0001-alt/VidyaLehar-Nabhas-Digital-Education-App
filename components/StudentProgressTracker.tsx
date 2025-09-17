@@ -16,10 +16,13 @@ const StudentProgressTracker: React.FC<StudentProgressTrackerProps> = ({ student
   const [expandedCourses, setExpandedCourses] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const allProgress = getStudentProgress();
-    const studentProgress = allProgress.find(p => p.studentId === studentId) || null;
-    setProgress(studentProgress);
-    setCourses(getCourses());
+    const fetchData = async () => {
+        const allProgress = await getStudentProgress();
+        const studentProgress = allProgress.find(p => p.studentId === studentId) || null;
+        setProgress(studentProgress);
+        setCourses(await getCourses());
+    };
+    fetchData();
   }, [studentId]);
 
   const toggleCourseExpansion = (courseId: string) => {

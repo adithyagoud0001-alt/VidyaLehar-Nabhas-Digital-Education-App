@@ -9,7 +9,6 @@ import {
   downloadLesson, 
   removeDownloadedLesson,
   getVideo,
-  isLessonDownloaded,
   getStudentProgress,
 } from '../services/offlineContentService';
 import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
@@ -19,6 +18,7 @@ import { DownloadIcon } from './icons/DownloadIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { UserRole } from '../constants';
 import { InformationCircleIcon } from './icons/InformationCircleIcon';
+import AITutor from './AITutor';
 
 interface LessonViewProps {
   course: Course;
@@ -29,6 +29,18 @@ interface LessonViewProps {
   isOnline: boolean;
 }
 
+// Helper to convert YouTube URL to an embeddable URL
+const getYouTubeEmbedUrl = (url: string): string | null => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    if (match && match[2].length === 11) {
+        return `https://www.youtube.com/embed/${match[2]}`;
+    }
+    return null;
+};
+
+
 const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectLesson, onBack, isOnline }) => {
   const { t } = useTranslation();
   const difficultyStyles: Record<'Easy' | 'Medium' | 'Hard', string> = {
@@ -37,9 +49,7 @@ const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectL
     Hard: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
   };
 
-  // FIX: Use a switch statement to ensure type safety when getting difficulty translation keys.
   const getDifficultyTranslation = (difficulty: 'Easy' | 'Medium' | 'Hard') => {
-    // This assumes translation keys are `difficulty_easy`, `difficulty_medium`, etc.
     switch (difficulty) {
       case 'Easy':
         return t('difficulty_easy');
@@ -57,6 +67,7 @@ const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectL
   const [downloadedLessons, setDownloadedLessons] = useState<Set<string>>(new Set());
   const [downloadingLessons, setDownloadingLessons] = useState<Set<string>>(new Set());
   const [videoSrc, setVideoSrc] = useState<string | undefined>(undefined);
+  const [youtubeEmbedUrl, setYoutubeEmbedUrl] = useState<string | null>(null);
   const [lessonPerformance, setLessonPerformance] = useState<{ attempts: number; bestScore: number; } | null>(null);
 
   useEffect(() => {
@@ -67,6 +78,9 @@ const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectL
     let objectUrl: string | undefined;
 
     const setupVideo = async () => {
+      setVideoSrc(undefined);
+      setYoutubeEmbedUrl(null);
+
       // Prioritize teacher-uploaded offline video
       if (lesson.hasOfflineVideo) {
           try {
@@ -76,17 +90,25 @@ const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectL
                   setVideoSrc(objectUrl);
               } else {
                   console.error("Offline video blob not found in DB for lesson:", lesson.id);
-                  setVideoSrc(undefined);
               }
           } catch (error) {
               console.error("Error loading offline video from DB:", error);
-              setVideoSrc(undefined);
           }
           return;
       }
 
       // Fallback to URL-based video logic
       if (lesson.videoUrl) {
+          const embedUrl = getYouTubeEmbedUrl(lesson.videoUrl);
+          if (embedUrl) {
+              if (isOnline) {
+                  setYoutubeEmbedUrl(embedUrl);
+              }
+              // YouTube videos can't be played offline or downloaded, so we stop here.
+              return;
+          }
+
+          // It's a non-YouTube URL, proceed with download/streaming logic
           const isDownloadedByStudent = downloadedLessons.has(lesson.id);
           if (isDownloadedByStudent) {
               try {
@@ -94,21 +116,17 @@ const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectL
                   if (videoBlob) {
                       objectUrl = URL.createObjectURL(videoBlob);
                       setVideoSrc(objectUrl);
-                  } else {
-                      if (isOnline) setVideoSrc(lesson.videoUrl); else setVideoSrc(undefined);
+                  } else if (isOnline) {
+                      setVideoSrc(lesson.videoUrl);
                   }
               } catch (error) {
                   console.error("Error loading downloaded video from DB:", error);
-                  if (isOnline) setVideoSrc(lesson.videoUrl); else setVideoSrc(undefined);
+                  if (isOnline) setVideoSrc(lesson.videoUrl);
               }
-          } else {
-              if (isOnline) setVideoSrc(lesson.videoUrl); else setVideoSrc(undefined);
+          } else if (isOnline) {
+              setVideoSrc(lesson.videoUrl);
           }
-          return;
       }
-      
-      // No video for this lesson
-      setVideoSrc(undefined);
     };
 
     setupVideo();
@@ -121,34 +139,32 @@ const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectL
   }, [lesson, isOnline, downloadedLessons]);
 
   useEffect(() => {
-    if (user.role === UserRole.STUDENT) {
-        const allProgress = getStudentProgress();
-        const studentProgress = allProgress.find(p => p.studentId === user.id);
-        if (studentProgress) {
-            const courseProgress = studentProgress.courseProgress.find(cp => cp.courseId === course.id);
-            if (courseProgress) {
-                const lessonStatus = courseProgress.lessonStatus.find(ls => ls.lessonId === lesson.id);
-                if (lessonStatus) {
-                    setLessonPerformance({
-                        attempts: lessonStatus.attempts,
-                        bestScore: lessonStatus.finalScore
-                    });
-                } else {
-                    setLessonPerformance(null);
-                }
-            } else {
-                setLessonPerformance(null);
-            }
-        } else {
+    const fetchPerformance = async () => {
+      if (user.role === UserRole.STUDENT) {
+          const allProgress = await getStudentProgress();
+          const studentProgress = allProgress.find(p => p.studentId === user.id);
+          if (studentProgress) {
+              const courseProgress = studentProgress.courseProgress.find(cp => cp.courseId === course.id);
+              const lessonStatus = courseProgress?.lessonStatus.find(ls => ls.lessonId === lesson.id);
+              if (lessonStatus) {
+                  setLessonPerformance({
+                      attempts: lessonStatus.attempts,
+                      bestScore: lessonStatus.finalScore
+                  });
+              } else {
+                  setLessonPerformance(null);
+              }
+          } else {
             setLessonPerformance(null);
-        }
-    } else {
+          }
+      } else {
         setLessonPerformance(null);
-    }
+      }
+    };
+    fetchPerformance();
   }, [user, course.id, lesson.id]);
 
 
-  // Stop speech synthesis when the component unmounts or the lesson changes
   useEffect(() => {
     return () => {
       cancel();
@@ -214,11 +230,11 @@ const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectL
       </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Sidebar */}
         <aside className="lg:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md self-start">
           <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100">{course.title}</h3>
           <ul className="space-y-1">
             {course.lessons.map((l) => {
+              const isYouTube = l.videoUrl ? getYouTubeEmbedUrl(l.videoUrl) !== null : false;
               const isDownloading = downloadingLessons.has(l.id);
               const isDownloaded = downloadedLessons.has(l.id);
               return (
@@ -240,14 +256,9 @@ const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectL
                     )}
                   </div>
                 </button>
-                {/* Student download controls only appear for URL-based videos */}
-                {user.role === UserRole.STUDENT && l.videoUrl && (
+                {user.role === UserRole.STUDENT && l.videoUrl && !isYouTube && (
                   <div className="flex-shrink-0 ml-2">
-                    {isDownloading ? (
-                        <div className="w-8 h-8 flex items-center justify-center" aria-label={t('downloading')}>
-                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-500"></div>
-                        </div>
-                    ) : isDownloaded ? (
+                    {isDownloaded ? (
                         <button
                             onClick={() => handleDelete(l.id)}
                             title={t('delete_download')}
@@ -259,12 +270,16 @@ const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectL
                     ) : (
                         <button
                             onClick={() => handleDownload(l)}
-                            disabled={!isOnline}
-                            title={isOnline ? t('download_lesson') : t('download_disabled_offline')}
-                            aria-label={isOnline ? t('download_lesson') : t('download_disabled_offline')}
-                            className="p-2 rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                            disabled={!isOnline || isDownloading}
+                            title={isDownloading ? t('downloading') : (isOnline ? t('download_lesson') : t('download_disabled_offline'))}
+                            aria-label={isDownloading ? t('downloading') : (isOnline ? t('download_lesson') : t('download_disabled_offline'))}
+                            className="w-9 h-9 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                            <DownloadIcon className="h-5 w-5" />
+                            {isDownloading ? (
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-500" />
+                            ) : (
+                                <DownloadIcon className="h-5 w-5" />
+                            )}
                         </button>
                     )}
                   </div>
@@ -274,7 +289,6 @@ const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectL
           </ul>
         </aside>
 
-        {/* Main Content */}
         <main className="lg:col-span-2 space-y-8">
           {lesson.summary && (
             <div className="bg-brand-50 dark:bg-brand-900/30 p-5 rounded-lg border border-brand-200 dark:border-brand-800">
@@ -328,9 +342,18 @@ const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectL
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <div className="aspect-video bg-black rounded-lg overflow-hidden mb-4 flex items-center justify-center">
-                          {videoSrc ? (
+                          {youtubeEmbedUrl ? (
+                            <iframe
+                              className="w-full h-full"
+                              src={youtubeEmbedUrl}
+                              title="YouTube video player"
+                              frameBorder="0"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                              allowFullScreen
+                            ></iframe>
+                          ) : videoSrc ? (
                             <video
-                                key={videoSrc} // Force re-mount when src changes between network/blob
+                                key={videoSrc}
                                 ref={videoRef}
                                 controls
                                 className="w-full h-full"
@@ -359,6 +382,17 @@ const LessonView: React.FC<LessonViewProps> = ({ course, lesson, user, onSelectL
               <Quiz questions={lesson.quiz} onQuizComplete={handleQuizComplete} />
             </div>
           )}
+
+          <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-lg shadow-md">
+            <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4">{t('need_help_ask_ai_tutor')}</h3>
+            <AITutor
+              lessonContext={lesson.content}
+              isOnline={isOnline}
+              lessonTitle={lesson.title}
+              user={user}
+              performanceContext={lessonPerformance}
+            />
+          </div>
         </main>
       </div>
     </div>

@@ -107,6 +107,7 @@ const translations = {
     "difficulty_easy": "Easy",
     "difficulty_medium": "Medium",
     "difficulty_hard": "Hard",
+    "need_help_ask_ai_tutor": "Need Help? Ask the AI Tutor",
     // Fix: Add missing translation keys for AITutor component
     "ai_tutor_offline_message": "The AI Tutor is only available when you are online.",
     "ask_a_question_placeholder": "Ask a question about the lesson...",
@@ -217,6 +218,7 @@ const translations = {
     "difficulty_easy": "ਸੌਖਾ",
     "difficulty_medium": "ਦਰਮਿਆਨਾ",
     "difficulty_hard": "ਔਖਾ",
+    "need_help_ask_ai_tutor": "ਮਦਦ ਦੀ ਲੋੜ ਹੈ? AI ਟਿਊਟਰ ਨੂੰ ਪੁੱਛੋ",
     // Fix: Add missing translation keys for AITutor component
     "ai_tutor_offline_message": "AI ਟਿਊਟਰ ਸਿਰਫ਼ ਉਦੋਂ ਹੀ ਉਪਲਬਧ ਹੁੰਦਾ ਹੈ ਜਦੋਂ ਤੁਸੀਂ ਔਨਲਾਈਨ ਹੁੰਦੇ ਹੋ।",
     "ask_a_question_placeholder": "ਪਾਠ ਬਾਰੇ ਕੋਈ ਸਵਾਲ ਪੁੱਛੋ...",
