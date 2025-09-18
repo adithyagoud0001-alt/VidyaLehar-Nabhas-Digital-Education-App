@@ -23,10 +23,14 @@ export const syncDown = async () => {
     const allRawProgressSnake = studentProgressRes.data || [];
     const allProfiles = profilesRes.data || [];
 
+    const serverCourseIds = new Set(allCoursesSnake.map(c => c.id));
+
     const allProgress: StudentProgress[] = allRawProgressSnake.map(p => ({
         studentId: p.student_id,
         studentName: p.student_name,
-        courseProgress: (p.course_progress as any) || [],
+        // As a failsafe, filter out any progress for courses that no longer exist on the server.
+        // This makes the client resilient to inconsistent data during the sync process.
+        courseProgress: ((p.course_progress as any) || []).filter((cp: any) => serverCourseIds.has(cp.courseId)),
         scoreHistory: (p.score_history as any) || [],
     }));
 
@@ -34,7 +38,6 @@ export const syncDown = async () => {
     const localProgressIds = await db.studentProgress.toCollection().keys() as string[];
     const localProfileIds = await db.profiles.toCollection().keys() as string[];
     
-    const serverCourseIds = new Set(allCoursesSnake.map(c => c.id));
     const serverProgressIds = new Set(allProgress.map(p => p.studentId));
     const serverProfileIds = new Set(allProfiles.map(p => p.id));
 
@@ -135,8 +138,54 @@ export const processSyncQueue = async () => {
                     error = lessonError;
                     break;
                  case 'DELETE_COURSE':
-                    const { error: deleteCourseError } = await supabase.from('courses').delete().match({ id: action.payload.id });
-                    error = deleteCourseError;
+                    const courseIdToDelete = action.payload.id;
+                    // This is now the source of truth for handling a course deletion and its side effects.
+                    // 1. Delete associated lessons.
+                    const { error: lessonsError } = await supabase.from('lessons').delete().match({ course_id: courseIdToDelete });
+                    if (lessonsError) {
+                        error = lessonsError;
+                        break;
+                    }
+
+                    // 2. Delete the course itself.
+                    const { error: deleteCourseError } = await supabase.from('courses').delete().match({ id: courseIdToDelete });
+                    if (deleteCourseError) {
+                        error = deleteCourseError;
+                        break;
+                    }
+
+                    // 3. Atomically clean up all student progress records on the backend.
+                    const { data: allProgress, error: fetchProgressError } = await supabase
+                        .from('student_progress')
+                        .select('student_id, course_progress');
+                        
+                    if(fetchProgressError) {
+                        error = fetchProgressError;
+                        break;
+                    }
+
+                    if (allProgress) {
+                        const progressUpdates = allProgress.map(p => {
+                            const courseProgress = (p.course_progress as any[] || []);
+                            const updatedCourseProgress = courseProgress.filter(cp => cp.courseId !== courseIdToDelete);
+                            
+                            if (updatedCourseProgress.length < courseProgress.length) {
+                                return {
+                                    student_id: p.student_id,
+                                    course_progress: updatedCourseProgress,
+                                };
+                            }
+                            return null;
+                        }).filter((p): p is { student_id: string; course_progress: any[]; } => p !== null);
+
+                        if (progressUpdates.length > 0) {
+                            const { error: updateProgressError } = await supabase.from('student_progress').upsert(progressUpdates);
+                            if (updateProgressError) {
+                                error = updateProgressError;
+                                break;
+                            }
+                        }
+                    }
                     break;
                  case 'DELETE_LESSON':
                     const { error: deleteLessonError } = await supabase.from('lessons').delete().match({ id: action.payload.id });

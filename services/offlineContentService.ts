@@ -72,47 +72,19 @@ export const saveCourse = async (courseData: Omit<Course, 'id' | 'lessons' | 'au
 };
 
 export const deleteCourse = async (courseId: string): Promise<void> => {
-    const courseToDelete = await db.courses.get(courseId);
-    if (courseToDelete) {
-        // --- Sync Queueing ---
-        // 1. Queue deletion for all associated lessons
-        for (const lesson of courseToDelete.lessons) {
-            await db.syncQueue.add({ type: 'DELETE_LESSON', payload: { id: lesson.id }, timestamp: Date.now() });
-        }
-        // 2. Queue remote deletion for the course itself
+    // Check if the course exists locally before proceeding
+    const courseExists = await db.courses.get(courseId);
+    if (courseExists) {
+        // Queue the master deletion action for the sync processor.
+        // The processor will handle deleting the course, its lessons, and cleaning up student progress on the backend.
         await db.syncQueue.add({ type: 'DELETE_COURSE', payload: { id: courseId }, timestamp: Date.now() });
 
-        // --- Local Deletion ---
-        // 3. Delete the course locally (lessons are embedded, so they go too)
+        // Delete the course locally. Since lessons are embedded, they are removed too.
         await db.courses.delete(courseId);
 
-        // --- Clean up associated student progress ---
-        // 4. Find all student progress records and update them
-        const allProgress = await db.studentProgress.toArray();
-        for (const studentProgress of allProgress) {
-            const progressIndex = studentProgress.courseProgress.findIndex(cp => cp.courseId === courseId);
-            
-            // If the student had progress in this course, remove it
-            if (progressIndex > -1) {
-                studentProgress.courseProgress.splice(progressIndex, 1);
-                
-                // Recalculate overall score history for today
-                const allCourseScores = studentProgress.courseProgress.map(cp => cp.score).filter(s => s > 0);
-                const overallAverage = allCourseScores.length > 0 ? allCourseScores.reduce((sum, s) => sum + s, 0) / allCourseScores.length : 0;
-                const today = new Date().toISOString().split('T')[0];
-                const todayHistory = studentProgress.scoreHistory.find(h => h.date === today);
-
-                if (todayHistory) {
-                    todayHistory.score = overallAverage;
-                }
-                
-                // 5. Update local DB for the student
-                await db.studentProgress.put(studentProgress);
-                
-                // 6. Queue the updated progress for sync
-                await db.syncQueue.add({ type: 'UPDATE_PROGRESS', payload: studentProgress, timestamp: Date.now() });
-            }
-        }
+        // We no longer need to manually clean up student progress here.
+        // The next syncDown on any client (teacher or student) will fetch the corrected
+        // state from the backend, including the removed course and updated progress records.
     }
 };
 
