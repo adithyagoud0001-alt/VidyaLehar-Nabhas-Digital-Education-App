@@ -1,16 +1,16 @@
-import { createClient } from '@supabase/supabase-js';
-import { UserRole } from '../constants';
 
-// Your Supabase credentials are now loaded from environment variables.
-// This is a critical security practice for deployment.
-// Fix: Cast `import.meta` to `any` to bypass TypeScript error "Property 'env' does not exist on type 'ImportMeta'".
-const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
-const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
+
+import { createClient } from '@supabase/supabase-js';
+// FIX: Removed import of UserRole to make the Database type self-contained and prevent type resolution issues.
+// import { UserRole } from '../constants';
+
+// User-provided Supabase credentials to make the app functional.
+// In a production environment, these should be stored securely as environment variables.
+const supabaseUrl = 'https://ovibdtpvvjqehosycfzt.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92aWJkdHB2dmpxZWhvc3ljZnp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMTc0NTAsImV4cCI6MjA3MzY5MzQ1MH0.l6-iWr4ANOotUPl5vcUWJprHjXiL5Y2REmiB-WJH6bo';
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  // This provides a clear error message in the developer console
-  // if the environment variables are not set up correctly.
-  throw new Error("Supabase URL and anon key are required. Make sure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in your .env file.");
+  throw new Error("Supabase URL and anon key are required.");
 }
 
 
@@ -32,18 +32,21 @@ export type Database = {
         Row: {
           id: string;
           username: string;
-          role: UserRole;
+          // FIX: Replaced imported enum with string literal type to fix type inference.
+          role: 'Student' | 'Teacher';
           class: number;
         };
         Insert: {
           id: string;
           username: string;
-          role: UserRole;
+          // FIX: Replaced imported enum with string literal type to fix type inference.
+          role: 'Student' | 'Teacher';
           class: number;
         };
         Update: {
           username?: string;
-          role?: UserRole;
+          // FIX: Replaced imported enum with string literal type to fix type inference.
+          role?: 'Student' | 'Teacher';
           class?: number;
         };
       };
@@ -52,7 +55,8 @@ export type Database = {
           id: string;
           title: string;
           description: string;
-          icon: string;
+          // FIX: Used specific string literal type for better type safety.
+          icon: 'Book' | 'Computer' | 'Calculator';
           author_id: string;
           for_class: number;
         };
@@ -60,14 +64,16 @@ export type Database = {
           id: string;
           title: string;
           description: string;
-          icon: string;
+          // FIX: Used specific string literal type for better type safety.
+          icon: 'Book' | 'Computer' | 'Calculator';
           author_id: string;
           for_class: number;
         };
         Update: {
           title?: string;
           description?: string;
-          icon?: string;
+          // FIX: Used specific string literal type for better type safety.
+          icon?: 'Book' | 'Computer' | 'Calculator';
         };
       };
       lessons: {
@@ -80,7 +86,8 @@ export type Database = {
           video_url: string | null;
           transcript: Json | null;
           quiz: Json;
-          difficulty: string | null;
+          // FIX: Used specific string literal type for better type safety.
+          difficulty: 'Easy' | 'Medium' | 'Hard' | null;
         };
         Insert: {
           id: string;
@@ -91,7 +98,8 @@ export type Database = {
           video_url?: string | null;
           transcript?: Json | null;
           quiz: Json;
-          difficulty?: string | null;
+          // FIX: Used specific string literal type for better type safety.
+          difficulty?: 'Easy' | 'Medium' | 'Hard' | null;
         };
         Update: {
           title?: string;
@@ -100,7 +108,8 @@ export type Database = {
           video_url?: string | null;
           transcript?: Json | null;
           quiz?: Json;
-          difficulty?: string | null;
+          // FIX: Used specific string literal type for better type safety.
+          difficulty?: 'Easy' | 'Medium' | 'Hard' | null;
         };
       };
       student_progress: {

@@ -1,10 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
 import type { Student, Teacher } from '../types';
 
-// Per guidelines, the API key must be obtained from the environment.
-// For browser-based apps using a build tool like Vite, this is done via `import.meta.env`.
-// Fix: Cast `import.meta` to `any` to bypass TypeScript error "Property 'env' does not exist on type 'ImportMeta'".
-const apiKey = (import.meta as any).env.VITE_API_KEY;
+// Per guidelines, the API key must be obtained from the environment variable `process.env.API_KEY`.
+// This is assumed to be available in the execution environment.
+const apiKey = process.env.API_KEY;
 
 // Initialize the client only if the API key is available.
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
