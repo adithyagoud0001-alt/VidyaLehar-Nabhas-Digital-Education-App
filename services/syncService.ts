@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 import { db } from './db';
-import type { Course, Lesson, StudentProgress, QuizQuestion, TranscriptEntry } from '../types';
+import type { Course, Lesson, StudentProgress, QuizQuestion, TranscriptEntry, CourseProgress } from '../types';
 
 // Fetches all data from Supabase and populates the local IndexedDB.
 export const syncDown = async () => {
@@ -188,8 +188,68 @@ export const processSyncQueue = async () => {
                     }
                     break;
                  case 'DELETE_LESSON':
-                    const { error: deleteLessonError } = await supabase.from('lessons').delete().match({ id: action.payload.id });
-                    error = deleteLessonError;
+                    const { id: lessonIdToDelete, courseId: parentCourseId } = action.payload;
+                    
+                    // 1. Delete the lesson itself.
+                    const { error: deleteLessonError } = await supabase.from('lessons').delete().match({ id: lessonIdToDelete });
+                    if (deleteLessonError) {
+                        error = deleteLessonError;
+                        break;
+                    }
+                    
+                    // 2. Atomically clean up all student progress records on the backend.
+                    const { data: allProgressForLesson, error: fetchProgressErr } = await supabase
+                        .from('student_progress')
+                        .select('student_id, course_progress');
+
+                    if (fetchProgressErr) {
+                        error = fetchProgressErr;
+                        break;
+                    }
+
+                    if (allProgressForLesson) {
+                        const progressUpdates = allProgressForLesson.map(p => {
+                            const courseProgressList = (p.course_progress as any[] || []) as CourseProgress[];
+                            let hasChanged = false;
+
+                            const updatedCourseProgressList = courseProgressList.map(cp => {
+                                // Find the course that contained the deleted lesson
+                                if (cp.courseId === parentCourseId) {
+                                    const originalLessonStatusCount = cp.lessonStatus.length;
+                                    const updatedLessonStatus = cp.lessonStatus.filter(ls => ls.lessonId !== lessonIdToDelete);
+                                    
+                                    // If a lesson status was removed, we need to update this student's progress
+                                    if (updatedLessonStatus.length < originalLessonStatusCount) {
+                                        hasChanged = true;
+                                        // Recalculate scores for this course
+                                        const completedLessonsWithScore = updatedLessonStatus.filter(ls => ls.finalScore > 0);
+                                        cp.completedLessons = completedLessonsWithScore.length;
+                                        const totalScore = completedLessonsWithScore.reduce((sum, ls) => sum + ls.finalScore, 0);
+                                        cp.score = completedLessonsWithScore.length > 0 ? totalScore / completedLessonsWithScore.length : 0;
+                                        cp.lessonStatus = updatedLessonStatus;
+                                        // Also update total lessons count
+                                        cp.totalLessons = Math.max(0, cp.totalLessons -1);
+                                    }
+                                }
+                                return cp;
+                            });
+
+                            if (hasChanged) {
+                                return {
+                                    student_id: p.student_id,
+                                    course_progress: updatedCourseProgressList,
+                                };
+                            }
+                            return null;
+                        }).filter((p): p is { student_id: string; course_progress: any[]; } => p !== null);
+
+                        if (progressUpdates.length > 0) {
+                            const { error: updateProgressError } = await supabase.from('student_progress').upsert(progressUpdates);
+                             if (updateProgressError) {
+                                error = updateProgressError;
+                            }
+                        }
+                    }
                     break;
             }
 

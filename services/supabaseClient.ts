@@ -1,9 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 import { UserRole } from '../constants';
 
-// Your Supabase credentials have been inserted here.
-const supabaseUrl = 'https://ovibdtpvvjqehosycfzt.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92aWJkdHB2dmpxZWhvc3ljZnp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMTc0NTAsImV4cCI6MjA3MzY5MzQ1MH0.l6-iWr4ANOotUPl5vcUWJprHjXiL5Y2REmiB-WJH6bo';
+// Your Supabase credentials are now loaded from environment variables.
+// This is a critical security practice for deployment.
+// Fix: Cast `import.meta` to `any` to bypass TypeScript error "Property 'env' does not exist on type 'ImportMeta'".
+const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
+const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  // This provides a clear error message in the developer console
+  // if the environment variables are not set up correctly.
+  throw new Error("Supabase URL and anon key are required. Make sure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in your .env file.");
+}
+
 
 export type Json =
   | string

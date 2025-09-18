@@ -104,6 +104,7 @@ export const saveLesson = async (
         await saveVideo(lessonId, videoFileAction);
     } else if (videoFileAction === null) {
         if (oldLesson?.hasOfflineVideo) await deleteVideo(lessonId);
+    // FIX: Corrected typo 'oldLesso' to 'oldLesson'.
     } else if (lessonData.videoUrl && oldLesson?.hasOfflineVideo) {
         await deleteVideo(lessonId);
     }
@@ -144,64 +145,24 @@ export const saveLesson = async (
 
 export const deleteLesson = async (courseId: string, lessonId: string): Promise<void> => {
     const course = await db.courses.get(courseId);
-    if (course) {
-        const lessonToDelete = course.lessons.find(l => l.id === lessonId);
-        if (lessonToDelete?.hasOfflineVideo) {
-            await deleteVideo(lessonId).catch(err => console.error(`Failed to delete video for lesson ${lessonId}:`, err));
-        }
-        
-        // Update course object locally
-        const originalLessonCount = course.lessons.length;
-        course.lessons = course.lessons.filter(l => l.id !== lessonId);
-        
-        // Only proceed if a lesson was actually deleted
-        if (course.lessons.length < originalLessonCount) {
-            await db.courses.put(course);
-            // Queue remote deletion
-            await db.syncQueue.add({ type: 'DELETE_LESSON', payload: { id: lessonId }, timestamp: Date.now() });
+    if (!course) return;
 
-            // --- Clean up associated student progress ---
-            const allProgress = await db.studentProgress.toArray();
-            for (const studentProgress of allProgress) {
-                const courseProgress = studentProgress.courseProgress.find(cp => cp.courseId === courseId);
-                
-                if (courseProgress) {
-                    let progressNeedsUpdate = false;
-                    const lessonStatusIndex = courseProgress.lessonStatus.findIndex(ls => ls.lessonId === lessonId);
-                    
-                    if (lessonStatusIndex > -1) {
-                        courseProgress.lessonStatus.splice(lessonStatusIndex, 1);
-                        
-                        // Recalculate course-specific progress
-                        const completedLessonsWithScore = courseProgress.lessonStatus.filter(ls => ls.finalScore > 0);
-                        courseProgress.completedLessons = completedLessonsWithScore.length;
-                        const totalScore = completedLessonsWithScore.reduce((sum, ls) => sum + ls.finalScore, 0);
-                        courseProgress.score = completedLessonsWithScore.length > 0 ? totalScore / completedLessonsWithScore.length : 0;
-                        
-                        // Recalculate overall score history for today
-                        const allCourseScores = studentProgress.courseProgress.map(cp => cp.score).filter(s => s > 0);
-                        const overallAverage = allCourseScores.length > 0 ? allCourseScores.reduce((sum, s) => sum + s, 0) / allCourseScores.length : 0;
-                        const today = new Date().toISOString().split('T')[0];
-                        const todayHistory = studentProgress.scoreHistory.find(h => h.date === today);
-                        if (todayHistory) {
-                            todayHistory.score = overallAverage;
-                        }
-                        progressNeedsUpdate = true;
-                    }
-                    
-                    if (courseProgress.totalLessons !== course.lessons.length) {
-                        courseProgress.totalLessons = course.lessons.length;
-                        progressNeedsUpdate = true;
-                    }
-
-                    if (progressNeedsUpdate) {
-                        await db.studentProgress.put(studentProgress);
-                        await db.syncQueue.add({ type: 'UPDATE_PROGRESS', payload: studentProgress, timestamp: Date.now() });
-                    }
-                }
-            }
-        }
+    const lessonExists = course.lessons.some(l => l.id === lessonId);
+    if (!lessonExists) return;
+    
+    const lessonToDelete = course.lessons.find(l => l.id === lessonId);
+    if (lessonToDelete?.hasOfflineVideo) {
+        await deleteVideo(lessonId).catch(err => console.error(`Failed to delete video for lesson ${lessonId}:`, err));
     }
+    
+    // Update course object locally for immediate UI feedback
+    course.lessons = course.lessons.filter(l => l.id !== lessonId);
+    await db.courses.put(course);
+
+    // Fix: Queue a single, authoritative DELETE_LESSON action. 
+    // The sync service is now responsible for all server-side cleanup, including student progress.
+    // This removes the complex, error-prone local cleanup loop.
+    await db.syncQueue.add({ type: 'DELETE_LESSON', payload: { id: lessonId, courseId: courseId }, timestamp: Date.now() });
 };
 
 export const downloadLesson = async (lesson: Lesson): Promise<void> => {

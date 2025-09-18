@@ -1,8 +1,13 @@
 import { GoogleGenAI } from "@google/genai";
 import type { Student, Teacher } from '../types';
 
-// Fix: Per guidelines, the API key must be obtained from process.env.API_KEY and used directly.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Per guidelines, the API key must be obtained from the environment.
+// For browser-based apps using a build tool like Vite, this is done via `import.meta.env`.
+// Fix: Cast `import.meta` to `any` to bypass TypeScript error "Property 'env' does not exist on type 'ImportMeta'".
+const apiKey = (import.meta as any).env.VITE_API_KEY;
+
+// Initialize the client only if the API key is available.
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 
 // Fix: Add askAITutor function to be exported and used in AITutor.tsx component
@@ -13,8 +18,8 @@ export const askAITutor = async (
     user: Student | Teacher,
     performanceContext: { attempts: number; bestScore: number } | null
 ): Promise<string> => {
-    // Fix: Check if API key is provided via environment variables. This also resolves the impossible comparison error.
-    if (!process.env.API_KEY) {
+    // Fix: Check if the GoogleGenAI instance was successfully created.
+    if (!ai) {
       return "The AI Tutor is not configured. Please add a valid Gemini API key.";
     }
 
@@ -65,8 +70,8 @@ export const generateLessonSummary = async (
     lessonTitle: string,
     lessonContent: string
 ): Promise<string> => {
-    // Fix: Check if API key is provided via environment variables. This also resolves the impossible comparison error.
-     if (!process.env.API_KEY) {
+    // Fix: Check if the GoogleGenAI instance was successfully created.
+     if (!ai) {
       return "AI Summary generation is not configured. Please add a valid Gemini API key.";
     }
     const model = 'gemini-2.5-flash';
